@@ -45,7 +45,7 @@ Open <https://localhost:8080>, accept the self-signed certificate warning, and l
 
 ### Option A: make the package public (simplest)
 
-1. Go to `github.com/orgs/COMP09034-26/packages` and open `catalog-service-USERNAME`
+1. Go to `github.com/orgs/<ORG>/packages` and open `<REPO>`
 2. **Package settings → Danger Zone → Change visibility → Public**
 
 ### Option B: image pull secret (private package)
@@ -55,7 +55,7 @@ kubectl create namespace catalog
 
 kubectl create secret docker-registry ghcr-secret \
   --docker-server=ghcr.io \
-  --docker-username=YOUR_GITHUB_USERNAME \
+  --docker-username=<GITHUB_USER> \
   --docker-password=YOUR_GITHUB_TOKEN \
   -n catalog
 ```
@@ -69,7 +69,7 @@ imagePullSecrets:
 
 ## 3.5 Create the Kubernetes Manifest
 
-ArgoCD deploys whatever is in the `k8s/` folder of your repository. Create `k8s/deployment.yaml` (replace `USERNAME`). Unlike the local `deployment.yaml` in the repository root, it pulls the image from GHCR, so it has no `imagePullPolicy: Never`:
+ArgoCD deploys whatever is in the `k8s/` folder of your repository. Create `k8s/deployment.yaml` (replace `<ORG>` and `<REPO>`). Unlike the local `deployment.yaml` in the repository root, it pulls the image from GHCR, so it has no `imagePullPolicy: Never`:
 
 ```yaml
 apiVersion: apps/v1
@@ -88,7 +88,7 @@ spec:
     spec:
       containers:
       - name: catalog-service
-        image: ghcr.io/comp09034-26/catalog-service-USERNAME:latest
+        image: ghcr.io/<ORG>/<REPO>:latest
         ports:
         - containerPort: 9001
 ---
@@ -111,7 +111,7 @@ Commit and push `k8s/deployment.yaml` to `main`.
 
 ## 3.6 Create the ArgoCD Application
 
-Create `argocd-application.yaml` in your repository (replace `USERNAME`):
+Create `argocd-application.yaml` in your repository (replace `<ORG>` and `<REPO>`):
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
@@ -122,7 +122,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/COMP09034-26/catalog-service-USERNAME.git
+    repoURL: https://github.com/<ORG>/<REPO>.git
     targetRevision: main
     path: k8s
   destination:
@@ -201,7 +201,7 @@ Code change → CI/CD → new image → GitOps deployment.
 
    ```bash
    COMMIT_SHA=$(git rev-parse HEAD)
-   sed -i "s|catalog-service-USERNAME:.*|catalog-service-USERNAME:${COMMIT_SHA}|" k8s/deployment.yaml
+   sed -i "s|\(image: ghcr.io/[^:]*\):.*|\1:${COMMIT_SHA}|" k8s/deployment.yaml
    git add k8s/deployment.yaml
    git commit -m "Update image to ${COMMIT_SHA}"
    git push

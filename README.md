@@ -32,12 +32,11 @@ By the end of this lab you will:
 - Understand how the stages combine into a complete pipeline (Build → Release → Run)
 
 ## Prerequisites
-
-- Your own copy of the `catalog-service` repository in the `COMP09034-25` GitHub organization, named `catalog-service-USERNAME` (replace `USERNAME` with your GitHub username throughout)
-- JDK 17, Docker, and `git`
+- JDK 21, Docker, and `git`
 - A local Kubernetes cluster (e.g. Docker Desktop with Kubernetes enabled) and `kubectl` (needed for Part 3)
-
-The repository contains the application source, a `Dockerfile`, and Kubernetes manifests in `k8s/`.
+The repository contains the application source, a `Dockerfile`, and Kubernetes manifests in `k8s/
+`.
+- You'll be given the `<ORG>` and `<REPO>` values used later, which you can fill in the "Your Values" table in Part 2.
 
 ## Lab Structure
 

@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: catalog-service
-        image: ghcr.io/comp09034-26/catalog-service-USERNAME:latest
+        image: ghcr.io/<ORG>/<REPO>:latest
         ports:
         - containerPort: 9001
 ---

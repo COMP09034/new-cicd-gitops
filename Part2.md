@@ -2,6 +2,18 @@
 
 The commit stage tells us the code works and is safe. Now we package it as a **container image**, the release candidate that can be deployed to any environment.
 
+## Your Values
+
+Your instructor will give you the values below. Wherever `<ORG>` or `<REPO>` appears in Parts 2 and 3, substitute your own values. **Use lowercase** in image names, because container registries reject uppercase.
+
+| Placeholder | Meaning | Your value |
+| ----------- | ------- | ---------- |
+| `<ORG>` | GitHub organisation (course code and year) | |
+| `<REPO>` | Your repository name | |
+| `<GITHUB_USER>` | Your GitHub username | |
+
+Your image will be `ghcr.io/<ORG>/<REPO>`, and your packages are listed at `github.com/orgs/<ORG>/packages`.
+
 ## 2.1 Configure Repository Permissions
 
 The workflow needs permission to push packages.
@@ -72,7 +84,7 @@ Key points:
 - `if: ... conclusion == 'success' && ... event == 'push'` - packaging only runs if the commit stage passed (build, tests and scan) and was triggered by a push, not a manual run.
 - `ref: ${{ github.event.workflow_run.head_sha }}` - a `workflow_run` workflow would otherwise check out the latest commit on the default branch. Using `head_sha` builds the exact commit that was tested. `github.event.workflow_run` is part of the event payload GitHub sends when it triggers this workflow; you don't define it anywhere.
 - `GITHUB_TOKEN` is provided automatically; `packages: write` lets it push images.
-- The image is named after your repo, `ghcr.io/${{ github.repository }}`, i.e. `ghcr.io/comp09034-26/catalog-service-USERNAME`. The metadata action lowercases the name for you.
+- The image is named after your repo, `ghcr.io/${{ github.repository }}`, i.e. `ghcr.io/<ORG>/<REPO>`. The metadata action lowercases the name for you.
 - **Tags**: the full commit SHA (exact traceability to code) and `latest` (convenient, but avoid in production).
 - **Caching**: `cache-from` and `cache-to` store Docker layers in the GitHub Actions cache so later builds are faster.
 - The image is built from the `Dockerfile` in the repository root. It builds the jar with the Gradle wrapper and runs it as a non-root user.
@@ -83,15 +95,15 @@ Commit and push to `main`. In **Actions**, **Commit Stage** runs first, then **P
 
 ## 2.3 Verify the Image
 
-Find the package at `github.com/orgs/COMP09034-26/packages`, and note its tags (the full commit SHA and `latest`).
+Find the package at `github.com/orgs/<ORG>/packages`, and note its tags (the full commit SHA and `latest`).
 
 To run it locally, first log in with a Personal Access Token (classic) with `read:packages` scope (**Settings → Developer settings → Personal access tokens**). Never commit tokens to git.
 
 ```bash
-echo YOUR_TOKEN | docker login ghcr.io -u YOUR_USERNAME --password-stdin
+echo YOUR_TOKEN | docker login ghcr.io -u <GITHUB_USER> --password-stdin
 
-docker pull ghcr.io/comp09034-26/catalog-service-USERNAME:latest
-docker run --rm -p 9001:9001 ghcr.io/comp09034-26/catalog-service-USERNAME:latest
+docker pull ghcr.io/<ORG>/<REPO>:latest
+docker run --rm -p 9001:9001 ghcr.io/<ORG>/<REPO>:latest
 ```
 
 In another terminal:
