@@ -16,7 +16,7 @@ Your image will be `ghcr.io/<ORG>/<REPO>`, and your packages are listed at `gith
 
 ## 2.1 Configure Repository Permissions
 
-The workflow needs permission to push packages.
+Each stage of the deployment pipeline gets its own workflow. The commit stage stays in `commit-stage.yml`; packaging goes in a new file that runs only when the commit stage succeeds on `main`.
 
 1. In your repository go to **Settings → Actions → General**
 2. Under **Workflow permissions**, select **Read and write permissions**
@@ -93,7 +93,9 @@ Because this workflow is triggered by `workflow_run`, GitHub only uses the versi
 
 Commit and push to `main`. In **Actions**, **Commit Stage** runs first, then **Package Stage** starts once it succeeds.
 
-## 2.3 Verify the Image
+> `workflow_run` workflows only take effect once the file is on the default branch, so push `package-stage.yml` to `main` directly.
+
+## 2.2 Verify the Image
 
 Find the package at `github.com/orgs/<ORG>/packages`, and note its tags (the full commit SHA and `latest`).
 
@@ -126,7 +128,7 @@ Verify that packaging is skipped for unmerged code. The Commit Stage runs on eve
 6. In **Actions**, **Commit Stage** runs on `main`, then **Package Stage** runs and pushes a new image tagged with the merge commit SHA
 7. Clean up: `git checkout main && git pull && git branch -d greeting-change`
 
-## 2.5 Image Tagging Strategies
+## 2.4 Image Tagging Strategies
 
 | Strategy | Example | Pros | Cons |
 | -------- | ------- | ---- | ---- |
@@ -137,7 +139,7 @@ Verify that packaging is skipped for unmerged code. The Commit Stage runs on eve
 
 If there's a bug in production, the SHA tag lets you run `git show abc123f` to see exactly what code is running and reproduce it locally. This is impossible with only `latest`. **In production, always reference images by SHA.**
 
-## 2.6 The Pipeline So Far
+## 2.5 The Pipeline So Far
 
 ```text
 Commit Stage:  Build → Test → Vulnerability Scan
