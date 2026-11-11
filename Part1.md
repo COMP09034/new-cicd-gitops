@@ -31,7 +31,7 @@ For per-test detail, open the HTML report at `build/reports/tests/test/index.htm
 To run a subset of tests:
 
 ```bash
-./gradlew test --tests *Controller
+./gradlew test --tests *Co
 ```
 
 ## 1.2 Automate with GitHub Actions
@@ -95,24 +95,20 @@ Broken code is caught within minutes of the commit, and nothing after this stage
 
 Tests check that the code works. We should also check that its dependencies are safe. **Grype** matches your dependencies against known CVE databases, and results are graded **Critical**, **High**, **Medium**, **Low** or **Negligible**.
 
-Try it locally:
-
-```bash
-curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sudo sh -s -- -b /usr/local/bin
-grype .
-```
-
-Now add these steps to the end of the `build` job in `commit-stage.yml`:
+Rather than installing the tool ourselves, we'll use the official Grype GitHub Action. Add this step to the end of the `build` job in `commit-stage.yml`:
 
 ```yaml
-      - name: Install Grype
-        run: curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
-
       - name: Scan for vulnerabilities
-        run: grype . --fail-on high
+        uses: anchore/scan-action@v6
+        with:
+          path: "."
+          fail-build: true
+          severity-cutoff: high
 ```
 
-`--fail-on high` fails the build if a High or Critical vulnerability is found.
+- `path` is the directory to scan. Grype finds dependencies from files such as `build.gradle`.
+- `fail-build: true` fails the job if vulnerabilities are found at or above the cutoff.
+- `severity-cutoff: high` means only **High** and **Critical** findings fail the build.
 
 To see it working, add a known-vulnerable dependency to `build.gradle`:
 

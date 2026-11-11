@@ -25,3 +25,10 @@ jobs:
 
       - name: Build and test
         run: ./gradlew build
+
+      - name: Scan for vulnerabilities
+        uses: anchore/scan-action@v6
+        with:
+          path: "."
+          fail-build: true
+          severity-cutoff: high      
