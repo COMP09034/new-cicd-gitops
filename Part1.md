@@ -2,40 +2,36 @@
 
 The **commit stage** is the first phase of a pipeline. It runs on every commit, giving developers fast feedback (ideally under five minutes) and stopping broken or insecure code from progressing.
 
-Typical activities: compile, unit tests, static analysis and vulnerability scanning.
+Typical activities: compile, unit tests, static analysis and vulnerability scanning. In this part you'll focus on building and testing, then add a vulnerability scan as a security gate.
 
 ## 1.1 Run the Steps Locally
 
-Always verify locally before automating.
+Always verify locally before automating. The pipeline will run exactly the same commands.
 
-### Build and test
+### Build
+
+```bash
+./gradlew build
+```
+
+This compiles the code, runs all tests, and packages the application as a JAR in `build/libs/`. If any step fails, Gradle stops and reports `BUILD FAILED`.
+
+### Test
+
+To run only the tests:
 
 ```bash
 ./gradlew test
 ```
 
-You should see `BUILD SUCCESSFUL`. For per-test detail, open the HTML report at `build/reports/tests/test/index.html` (summary, packages, classes, and stack traces for failures).
+You should see `BUILD SUCCESSFUL`. Tests pass when all assertions hold and no unexpected exceptions occur. They fail when an assertion doesn't match or an exception is thrown.
 
-### Vulnerability scan with Grype
+For per-test detail, open the HTML report at `build/reports/tests/test/index.html`. It shows pass/fail counts, results by class, execution times, and full stack traces for failures.
 
-Vulnerable dependencies are a major security risk, so we scan for them early. **Grype** matches your dependencies against known CVE databases.
-
-```bash
-# Install
-curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sudo sh -s -- -b /usr/local/bin
-grype version
-
-# Scan the project
-grype .
-```
-
-Results are grouped by severity: **Critical**, **High**, **Medium**, **Low**, **Negligible**. Critical and High should be fixed first.
-
-To scan built artifacts as well:
+To run a subset of tests:
 
 ```bash
-./gradlew build
-grype build/libs
+./gradlew test --tests *Controller
 ```
 
 ## 1.2 Automate with GitHub Actions
@@ -53,7 +49,6 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   build:
@@ -73,32 +68,53 @@ jobs:
 
       - name: Build and test
         run: ./gradlew build
-
-      - name: Install Grype
-        run: curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
-
-      - name: Scan for vulnerabilities
-        run: grype . --fail-on high -o sarif --file results.sarif
-
-      - name: Upload vulnerability report
-        if: success() || failure()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: results.sarif
 ```
 
 Key points:
 
-- `permissions` - `contents: read` allows checkout; `security-events: write` allows publishing scan results to the repository's **Security** tab.
-- `./gradlew build` compiles, runs the tests and packages the JAR. Any failing step fails the job and skips later steps.
-- `--fail-on high` fails the build if a High or Critical vulnerability is found.
-- `if: success() || failure()` uploads the SARIF report even when the scan fails, so you can inspect the findings.
+- `on: push` runs the workflow on every push; `workflow_dispatch` also lets you run it manually from the **Actions** tab.
+- `permissions: contents: read` is the minimum needed to check out the code.
+- Each job runs on a fresh VM, so the workflow must check out the code and install Java itself.
+- `setup-gradle` caches dependencies between runs to keep the stage fast.
+- `./gradlew build` compiles, runs the tests and packages the JAR. If any step fails, the job fails and later steps are skipped.
 
 Commit and push, then check the **Actions** tab. All steps should be green.
 
-## 1.3 Trigger a Vulnerability Alert
+## 1.3 Break the Build
 
-To see the scan working, add a known-vulnerable dependency to `build.gradle`:
+The commit stage is a quality gate. Prove it works by making a test fail.
+
+1. Pick an existing test and change an expected value so the assertion is wrong
+2. Run `./gradlew test` locally and open the HTML report to find the failure and its stack trace
+3. Commit and push, then open the failed run in **Actions** and find the same failure in the log
+4. Revert the change, push again, and confirm the pipeline is green
+
+Broken code is caught within minutes of the commit, and nothing after this stage will run for it.
+
+## 1.4 Add a Security Gate
+
+Tests check that the code works. We should also check that its dependencies are safe. **Grype** matches your dependencies against known CVE databases, and results are graded **Critical**, **High**, **Medium**, **Low** or **Negligible**.
+
+Try it locally:
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sudo sh -s -- -b /usr/local/bin
+grype .
+```
+
+Now add these steps to the end of the `build` job in `commit-stage.yml`:
+
+```yaml
+      - name: Install Grype
+        run: curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Scan for vulnerabilities
+        run: grype . --fail-on high
+```
+
+`--fail-on high` fails the build if a High or Critical vulnerability is found.
+
+To see it working, add a known-vulnerable dependency to `build.gradle`:
 
 ```groovy
 implementation 'org.apache.logging.log4j:log4j-core:2.14.1' // Vulnerable dependency for teaching purposes
@@ -106,10 +122,7 @@ implementation 'org.apache.logging.log4j:log4j-core:2.14.1' // Vulnerable depend
 
 This Log4j version is affected by **Log4Shell (CVE-2021-44228)**, one of the most severe vulnerabilities ever discovered, trivially exploitable remotely.
 
-Commit and push, then:
-
-1. Observe the failed scan step in **Actions**
-2. Review the findings in the repository's **Security** tab
+Commit and push, then open the failed **Scan for vulnerabilities** step in **Actions** and review the findings.
 
 **Now remove the dependency**, commit, and confirm the pipeline is green again before moving on.
 
