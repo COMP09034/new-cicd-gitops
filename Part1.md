@@ -38,7 +38,7 @@ To run a subset of tests:
 
 A **workflow** is a YAML file in `.github/workflows/` that runs **jobs** (on a fresh runner VM) made of **steps** in response to **events** such as `push`.
 
-Create `.github/workflows/commit-stage.yml`:
+Create `.github/workflows/commit-stage.yaml`:
 
 ```yaml
 name: Commit Stage
@@ -102,7 +102,7 @@ curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sud
 grype .
 ```
 
-Now add these steps to the end of the `build` job in `commit-stage.yml`:
+Now add these steps to the end of the `build` job in `commit-stage.yaml`:
 
 ```yaml
       - name: Install Grype

@@ -10,24 +10,22 @@ The workflow needs permission to push packages.
 2. Under **Workflow permissions**, select **Read and write permissions**
 3. Click **Save**
 
-## 2.2 Add the Package Job
+## 2.2 Add the Package Workflow
 
-Edit `.github/workflows/commit-stage.yml`.
-
-First add an `env` block after the `on:` block. Using `github.repository` means the image is named after your repo, i.e. `ghcr.io/comp09034-26/catalog-service-USERNAME`:
+The package stage is a **separate workflow** that runs after the Commit Stage workflow succeeds. Create `.github/workflows/package-stage.yaml`:
 
 ```yaml
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-```
+name: Package Stage
 
-Then add the `package` job after the `build` job:
+on:
+  workflow_run:
+    workflows: ["Commit Stage"]
+    types: [completed]
+    branches: [main]
 
-```yaml
+jobs:
   package:
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -35,11 +33,16 @@ Then add the `package` job after the `build` job:
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -47,9 +50,9 @@ Then add the `package` job after the `build` job:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ghcr.io/${{ github.repository }}
           tags: |
-            type=sha,prefix=
+            type=raw,value=${{ github.event.workflow_run.head_sha }}
             type=raw,value=latest
 
       - name: Build and push image
@@ -59,20 +62,28 @@ Then add the `package` job after the `build` job:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 ```
 
 Key points:
 
-- `needs: build` - packaging only runs if tests and scans pass.
-- `if: ... refs/heads/main` - only merged code on `main` is packaged, not feature branches or PRs.
+- `workflows: ["Commit Stage"]` - this must match the `name:` of your commit stage workflow exactly. The Package Stage starts when that workflow completes on `main`.
+- `if: ... conclusion == 'success' && ... event == 'push'` - packaging only runs if the commit stage passed (build, tests and scan) and was triggered by a push, not a manual run.
+- `ref: ${{ github.event.workflow_run.head_sha }}` - a `workflow_run` workflow would otherwise check out the latest commit on the default branch. Using `head_sha` builds the exact commit that was tested. `github.event.workflow_run` is part of the event payload GitHub sends when it triggers this workflow; you don't define it anywhere.
 - `GITHUB_TOKEN` is provided automatically; `packages: write` lets it push images.
-- **Tags**: the short commit SHA (exact traceability to code) and `latest` (convenient, but avoid in production).
+- The image is named after your repo, `ghcr.io/${{ github.repository }}`, i.e. `ghcr.io/comp09034-26/catalog-service-USERNAME`. The metadata action lowercases the name for you.
+- **Tags**: the full commit SHA (exact traceability to code) and `latest` (convenient, but avoid in production).
+- **Caching**: `cache-from` and `cache-to` store Docker layers in the GitHub Actions cache so later builds are faster.
+- The image is built from the `Dockerfile` in the repository root. It builds the jar with the Gradle wrapper and runs it as a non-root user.
 
-Commit and push to `main`. In **Actions**, `build` runs first, then `package` once it succeeds.
+Because this workflow is triggered by `workflow_run`, GitHub only uses the version on the default branch (`main`). Changes to it take effect once they are on `main`.
+
+Commit and push to `main`. In **Actions**, **Commit Stage** runs first, then **Package Stage** starts once it succeeds.
 
 ## 2.3 Verify the Image
 
-Find the package at `github.com/orgs/COMP09034-26/packages`, and note its tags (a commit SHA and `latest`).
+Find the package at `github.com/orgs/COMP09034-26/packages`, and note its tags (the full commit SHA and `latest`).
 
 To run it locally, first log in with a Personal Access Token (classic) with `read:packages` scope (**Settings → Developer settings → Personal access tokens**). Never commit tokens to git.
 
@@ -91,16 +102,17 @@ curl localhost:9001/
 
 Stop the container with `Ctrl+C` (`--rm` removes it).
 
-## 2.4 Test the Pull Request Flow
+## 2.4 Test the Branch Flow
 
-Verify that packaging is skipped for unmerged code.
+Verify that packaging is skipped for unmerged code. The Commit Stage runs on every push, but the Package Stage only runs for the `main` branch.
 
 1. Create a branch: `git checkout -b greeting-change`
 2. Change the greeting in `HomeController.java`
-3. Commit, push the branch, and open a Pull Request
-4. In **Actions**, `build` runs and `package` is **skipped**
-5. Merge the PR. All jobs now run and a new image is pushed with the merge commit SHA.
-6. Clean up: `git checkout main && git pull && git branch -d greeting-change`
+3. Commit and push the branch
+4. In **Actions**, **Commit Stage** runs on the branch and **Package Stage** does **not** run
+5. Open a Pull Request and merge it into `main`
+6. In **Actions**, **Commit Stage** runs on `main`, then **Package Stage** runs and pushes a new image tagged with the merge commit SHA
+7. Clean up: `git checkout main && git pull && git branch -d greeting-change`
 
 ## 2.5 Image Tagging Strategies
 
@@ -117,7 +129,7 @@ If there's a bug in production, the SHA tag lets you run `git show abc123f` to s
 
 ```text
 Commit Stage:  Build → Test → Vulnerability Scan
-                        │  (only on main, if build passes)
+                        │  (workflow_run: only on main, if Commit Stage succeeds)
                         ▼
 Package Stage: Build Image → Tag → Push to GHCR
 ```
