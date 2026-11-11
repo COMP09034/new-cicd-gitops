@@ -60,16 +60,56 @@ kubectl create secret docker-registry ghcr-secret \
   -n catalog
 ```
 
-Then add this under `spec.template.spec` in `k8s/deployment.yaml`:
+Then add this under `spec.template.spec` in `k8s/deployment.yaml` (you create this file in section 3.5):
 
 ```yaml
 imagePullSecrets:
 - name: ghcr-secret
 ```
 
-Also check that the `image:` in `k8s/deployment.yaml` is `ghcr.io/comp09034-26/catalog-service-USERNAME:<SHA>` with a tag that exists in GHCR.
+## 3.5 Create the Kubernetes Manifest
 
-## 3.5 Create the ArgoCD Application
+ArgoCD deploys whatever is in the `k8s/` folder of your repository. Create `k8s/deployment.yaml` (replace `USERNAME`). Unlike the local `deployment.yaml` in the repository root, it pulls the image from GHCR, so it has no `imagePullPolicy: Never`:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog-service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: catalog-service
+  template:
+    metadata:
+      labels:
+        app: catalog-service
+    spec:
+      containers:
+      - name: catalog-service
+        image: ghcr.io/comp09034-26/catalog-service-USERNAME:latest
+        ports:
+        - containerPort: 9001
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: catalog-service
+  ports:
+  - port: 9001
+    targetPort: 9001
+```
+
+The image tag must exist in GHCR. Section 3.9 replaces `latest` with a full commit SHA tag. If you chose Option B above, add the `imagePullSecrets` block now.
+
+Commit and push `k8s/deployment.yaml` to `main`.
+
+## 3.6 Create the ArgoCD Application
 
 Create `argocd-application.yaml` in your repository (replace `USERNAME`):
 
@@ -101,7 +141,7 @@ kubectl apply -f argocd-application.yaml
 
 (Alternatively, use **+ NEW APP** in the UI with the same values.)
 
-## 3.6 Initial Sync
+## 3.7 Initial Sync
 
 The app starts **OutOfSync** because the sync policy is manual. In the UI, open `catalog-service`, click **SYNC**, then **SYNCHRONIZE**.
 
@@ -110,11 +150,11 @@ Watch the deployment and test it:
 ```bash
 kubectl get pods -n catalog -w
 
-kubectl port-forward -n catalog svc/catalog-service 9001:80
+kubectl port-forward -n catalog svc/catalog-service 9001:9001
 curl http://localhost:9001/        # in another terminal
 ```
 
-## 3.7 Enable Auto-Sync
+## 3.8 Enable Auto-Sync
 
 Update `argocd-application.yaml` so the `syncPolicy` reads:
 
@@ -135,7 +175,7 @@ kubectl apply -f argocd-application.yaml
 - **Prune**: delete cluster resources removed from Git
 - **Self-heal**: revert manual changes made directly in the cluster
 
-## 3.8 Test the End-to-End Flow
+## 3.9 Test the End-to-End Flow
 
 Code change → CI/CD → new image → GitOps deployment.
 
@@ -148,19 +188,19 @@ Code change → CI/CD → new image → GitOps deployment.
    }
    ```
 
-2. **Commit and push**, then watch **Actions**: `build` and `package` run and push an image tagged with the commit SHA.
+2. **Commit and push**, then watch **Actions**: **Commit Stage** runs, then **Package Stage** builds and pushes an image tagged with the full commit SHA. Wait for Package Stage to finish before the next step, or the tag won't exist yet.
 
    ```bash
    git add src/main/java
    git commit -m "Update greeting for GitOps demo"
    git push
-   git rev-parse --short HEAD     # the image tag
+   git rev-parse HEAD     # the image tag (full SHA)
    ```
 
-3. **Update the manifest** to the new tag, and push:
+3. **Update the manifest** to the new tag, and push. (This push triggers the pipeline once more, which builds an image that isn't deployed. That's expected.)
 
    ```bash
-   COMMIT_SHA=$(git rev-parse --short HEAD)
+   COMMIT_SHA=$(git rev-parse HEAD)
    sed -i "s|catalog-service-USERNAME:.*|catalog-service-USERNAME:${COMMIT_SHA}|" k8s/deployment.yaml
    git add k8s/deployment.yaml
    git commit -m "Update image to ${COMMIT_SHA}"
@@ -180,7 +220,7 @@ Code change → CI/CD → new image → GitOps deployment.
    # Welcome to the Catalog Service - GitOps Edition
    ```
 
-## 3.9 The Complete Pipeline
+## 3.10 The Complete Pipeline
 
 ```text
 Developer ── git push ──► GitHub Repository (code + k8s/ manifests)
@@ -205,7 +245,7 @@ Developer ── git push ──► GitHub Repository (code + k8s/ manifests)
 
 Benefits: full audit trail (every deployment is a commit), easy rollback (`git revert`), disaster recovery from Git, and no cluster credentials stored in CI.
 
-## 3.10 Useful Commands and Troubleshooting
+## 3.11 Useful Commands and Troubleshooting
 
 Requires the optional [ArgoCD CLI](https://argo-cd.readthedocs.io/en/stable/cli_installation/) (`argocd login localhost:8080 --username admin --insecure`).
 
@@ -223,7 +263,7 @@ git revert HEAD && git push                # roll back via Git (preferred)
 | Change not detected | Refresh in the UI, or check `kubectl logs -n argocd -l app.kubernetes.io/name=argocd-repo-server` |
 | App Degraded | `kubectl rollout status deployment/catalog-service -n catalog` |
 
-## 3.11 Clean Up
+## 3.12 Clean Up
 
 ```bash
 kubectl delete -f argocd-application.yaml
