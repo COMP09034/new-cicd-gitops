@@ -31,7 +31,7 @@ For per-test detail, open the HTML report at `build/reports/tests/test/index.htm
 To run a subset of tests:
 
 ```bash
-./gradlew test --tests *Co
+./gradlew test --tests *Controller*
 ```
 
 ## 1.2 Automate with GitHub Actions
