@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: catalog-service
-        image: ghcr.io/<ORG>/<REPO>:latest
+        image: ghcr.io/comp09034/new-cicd-gitops:latest
         ports:
         - containerPort: 9001
 ---
