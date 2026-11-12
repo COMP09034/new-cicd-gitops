@@ -20,7 +20,7 @@ kubectl get nodes
 
 ```bash
 kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 kubectl wait --for=condition=Ready pods --all -n argocd --timeout=300s
 kubectl get pods -n argocd
 ```
@@ -56,7 +56,7 @@ kubectl create namespace catalog
 kubectl create secret docker-registry ghcr-secret \
   --docker-server=ghcr.io \
   --docker-username=<GITHUB_USER> \
-  --docker-password=YOUR_GITHUB_TOKEN \
+  --docker-password=YOUR_TOKEN \
   -n catalog
 ```
 
@@ -122,7 +122,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/<ORG>/<REPO>.git
+    repoURL: https://github.com/COMP09034/new-cicd-gitops.git
     targetRevision: main
     path: k8s
   destination:
@@ -194,26 +194,33 @@ Code change → CI/CD → new image → GitOps deployment.
    git add src/main/java
    git commit -m "Update greeting for GitOps demo"
    git push
-   git rev-parse HEAD     # the image tag (full SHA)
    ```
 
-3. **Update the manifest** to the new tag, and push. (This push triggers the pipeline once more, which builds an image that isn't deployed. That's expected.)
+3. **Find the image tag in GHCR yourself.** On GitHub, open your repository and click **Packages** in the right-hand sidebar (or go to `https://github.com/orgs/COMP09034/packages`). Open the package, then look at **Recent tagged image versions**. You'll see each image with two tags: `latest` and a 40-character commit SHA. The newest SHA is the image built from your greeting commit. Copy it.
+
+   Confirm it's the right one by checking that it matches the commit SHA shown under the **Commits** tab of the repository (or in the Package Stage run in **Actions**). Don't use `latest`.
+
+4. **Edit the manifest by hand.** Open `k8s/deployment.yaml` and replace `latest` on the `image:` line with the SHA you copied:
+
+   ```yaml
+   image: ghcr.io/<ORG>/<REPO>:<PASTE_FULL_SHA_HERE>
+   ```
+
+   Then commit and push. (This push triggers the pipeline once more, which builds an image that isn't deployed. That's expected.)
 
    ```bash
-   COMMIT_SHA=$(git rev-parse HEAD)
-   sed -i "s|\(image: ghcr.io/[^:]*\):.*|\1:${COMMIT_SHA}|" k8s/deployment.yaml
    git add k8s/deployment.yaml
-   git commit -m "Update image to ${COMMIT_SHA}"
+   git commit -m "Update image tag to <SHA>"
    git push
    ```
 
-4. **Watch ArgoCD deploy** (it polls Git every ~3 minutes; click **Refresh** to speed it up). The app goes OutOfSync → Syncing → Synced, and new pods replace old ones:
+5. **Watch ArgoCD deploy** (it polls Git every ~3 minutes; click **Refresh** to speed it up). The app goes OutOfSync → Syncing → Synced, and new pods replace old ones:
 
    ```bash
    kubectl get pods -n catalog -w
    ```
 
-5. **Verify** (restart the port-forward if needed):
+6. **Verify** (restart the port-forward if needed):
 
    ```bash
    curl http://localhost:9001/
